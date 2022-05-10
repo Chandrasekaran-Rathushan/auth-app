@@ -30,10 +30,16 @@ class FireBaseTokenAuthentication(authentication.BaseAuthentication):
 
         try:
             decoded_token = auth.verify_id_token(id_token)
+            isExpired = timezone.now().timestamp() > decoded_token["exp"]
+            if isExpired:
+                del request.session['uid']
 
         except Exception:
+            try:
+                del request.session['uid']
+            except KeyError:
+                raise InvalidAuthToken("You have been logged out.")
             raise InvalidAuthToken("Invalid auth token")
-            pass
 
         if not id_token or not decoded_token:
             return None

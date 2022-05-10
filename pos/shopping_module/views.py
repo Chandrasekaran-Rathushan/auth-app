@@ -1,4 +1,15 @@
+import calendar
+import datetime
+import json
+import math
+
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import models
+from django.db.models import Sum, Count
+from django.db.models.expressions import Value, F
+from django.db.models.functions import Extract
 from django.http import Http404, JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, status
 from rest_framework.authentication import SessionAuthentication
@@ -367,3 +378,261 @@ class CategoryApiView(APIView):
         except:
             return Response({"message": "error"},
                             status=status.HTTP_404_NOT_FOUND)
+
+
+@csrf_exempt
+@api_view(['GET'])
+def get_stats(request):
+    data = None
+
+    currentDate = timezone.now()
+
+    currentDateStart = currentDate.replace(hour=0, minute=0, second=0, microsecond=0)
+    currentDateEnd = currentDate.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    monthStartDate = currentDate.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthEndDate = monthStartDate.replace(day=calendar.monthrange(monthStartDate.year, monthStartDate.month)[1],
+                                          hour=23, minute=59, second=59, microsecond=999999)
+
+    yearStartDate = currentDate.replace(day=1, month=1, hour=0, minute=0, second=0, microsecond=0)
+    yearEndDate = yearStartDate.replace(day=31, month=12, hour=23, minute=59, second=59, microsecond=999999)
+
+    chartStartDate = (currentDate - timezone.timedelta(days=365)).replace(day=1, hour=0, minute=0, second=0,
+                                                                          microsecond=0)
+    chartEndDate = currentDate.replace(day=calendar.monthrange(chartStartDate.year, chartStartDate.month)[1], hour=23,
+                                       minute=59, second=59, microsecond=999999)
+
+    try:
+        completedOrders = {
+            'key': 'completedOrders',
+            'value': Cart.objects.filter(isOrdered=True).count(),
+            'label': "Completed Orders",
+            "type": "text"
+        }
+        pendingOrders = {
+            'key': 'pendingOrders',
+            'value': Cart.objects.filter(isOrdered=False).count(),
+            'label': "Pending Orders",
+            "type": "text"
+        }
+        creditOrders = {
+            'key': 'creditOrders',
+            'value': Cart.objects.filter(isCreditBill=True).count(),
+            'label': "Credit Orders",
+            "type": "text"
+        }
+
+        salesForDayQS = Cart.objects.filter(
+            billingDateTime__range=[currentDateStart.isoformat(), currentDateEnd.isoformat()])
+
+        salesForTheDay = {
+            'key': 'salesForTheDay',
+            'value': salesForDayQS.aggregate(Sum('subTotal'))['subTotal__sum'],
+            'salesCount': salesForDayQS.count(),
+            'label': "Sales for the Day",
+            'start': currentDateStart.isoformat().split("+")[0],
+            'end': currentDateEnd.isoformat().split("+")[0],
+            "type": "date"
+        }
+
+        salesForTheMonthQS = Cart.objects.filter(
+            billingDateTime__range=[monthStartDate.isoformat(), monthEndDate.isoformat()])
+
+        salesForTheMonth = {
+            'key': 'salesForTheMonth',
+            'value': salesForTheMonthQS.aggregate(Sum('subTotal'))['subTotal__sum'],
+            'salesCount': salesForTheMonthQS.count(),
+            'label': "Sales for the Month",
+            'start': monthStartDate.isoformat().split("+")[0],
+            'end': monthEndDate.isoformat().split("+")[0],
+            "type": "date"
+        }
+
+        salesForTheYearQS = Cart.objects.filter(
+            billingDateTime__range=[yearStartDate.isoformat(), yearEndDate.isoformat()])
+
+        salesForTheYear = {
+            'key': 'salesForTheYear',
+            'value': salesForTheYearQS.aggregate(Sum('subTotal'))['subTotal__sum'],
+            'salesCount': salesForTheYearQS.count(),
+            'label': "Sales for the Year",
+            'start': yearStartDate.isoformat().split("+")[0],
+            'end': yearEndDate.isoformat().split("+")[0],
+            "type": "date"
+        }
+
+        salesByMonthQS = Cart.objects.annotate(billingMonth=Extract('billingDateTime', 'month')) \
+            .annotate(billingYear=Extract('billingDateTime', 'year')) \
+            .annotate(total=Sum('subTotal')) \
+            .filter(billingDateTime__range=[chartStartDate.isoformat(), chartEndDate.isoformat()]) \
+            .values('billingMonth', 'billingYear', "total") \
+            .annotate(noOfSalesForTheMonth=Count('billingMonth')) \
+            .order_by('billingYear', 'billingMonth')
+
+        salesByMonth = {
+            'key': 'salesByMonth',
+            'value': list(salesByMonthQS),
+            'monthCount': salesByMonthQS.count(),
+            'label': "Sales by Month",
+            'start': chartStartDate.isoformat().split("+")[0],
+            'end': chartEndDate.isoformat().split("+")[0],
+            "type": "chart"
+        }
+
+        # orders sales by month
+        # print(list(Cart.objects.annotate(billingMonth=Extract('billingDateTime', 'month'))
+        #            .order_by('billingMonth', 'orderId').values('orderId', 'billingMonth')))
+
+        # a = Cart.objects.all().values_list('billingDateTime__year', 'billingDateTime__month')
+        #                       .order_by('billingDateTime__year', 'billingDateTime__month')
+        # print(a)
+
+        data = [
+            completedOrders,
+            creditOrders,
+            pendingOrders,
+            salesForTheDay,
+            salesForTheMonth,
+            salesForTheYear,
+            salesByMonth
+        ]
+
+        return Response(data, status=status.HTTP_200_OK)
+
+    except:
+        Response({"message": "Something went wrong."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+def get_sales_report(request):
+    startDate = request.GET.get("startDate", "")
+    endDate = request.GET.get("endDate", "")
+    type = request.GET.get("type", None)
+
+    try:
+
+        if startDate != "" and endDate != "":
+            startDate = timezone.datetime \
+                .strptime(startDate, "%Y-%m-%d") \
+                .replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+
+            endDate = timezone.datetime \
+                .strptime(endDate, "%Y-%m-%d") \
+                .replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+
+        elif startDate == "" and endDate != "":
+            endDate = timezone.datetime \
+                .strptime(endDate, "%Y-%m-%d") \
+                .replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+            startDate = endDate.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+
+        elif startDate != "" and endDate == "":
+            startDate = timezone.datetime \
+                .strptime(startDate, "%Y-%m-%d") \
+                .replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+            endDate = startDate.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+
+        elif startDate == "" and endDate == "":
+            return Response({"error": "Provide valid start date and end date."}, status=status.HTTP_400_BAD_REQUEST)
+
+    except ValueError:
+        return Response({"error": "Provide valid start date and end date."}, status=status.HTTP_400_BAD_REQUEST)
+
+    e = 0.00001
+    noOfDays = round(math.floor(endDate.timestamp() - startDate.timestamp() + e) / (60 * 60) / 24)
+
+    salesForThePeriod = Cart.objects.filter(
+        billingDateTime__range=[startDate.isoformat(), endDate.isoformat()])
+
+    noOfMonths = ((endDate.year - startDate.year) * 12) \
+                 + (endDate.month - startDate.month) \
+                 + 1
+
+    daterange_unit = {True: "days", False: {True: "years", False: "months", None: ""}[noOfMonths > 12], None: ""}[
+        noOfDays < 27 and noOfMonths == 1]
+
+    if type is not None and type != "":
+        daterange_unit = type
+
+    salesByPeriodQS = []
+
+    def byDays():
+        return list(Cart.objects.filter(billingDateTime__range=[startDate.isoformat(), endDate.isoformat()]).values())
+
+    def byMonths():
+        qs = Cart.objects.annotate(billingMonth=Extract('billingDateTime', 'month')) \
+            .annotate(billingYear=Extract('billingDateTime', 'year')) \
+            .annotate(total=Sum('subTotal')) \
+            .filter(billingDateTime__range=[startDate.isoformat(), endDate.isoformat()]) \
+            .values('billingMonth', 'billingYear', "total") \
+            .annotate(noOfSalesForTheMonth=Count('billingMonth')) \
+            .order_by('billingYear', 'billingMonth')
+
+        data = []
+
+        allSalesInRange = Cart.objects.annotate(billingMonth=Extract('billingDateTime', 'month')) \
+            .annotate(billingYear=Extract('billingDateTime', 'year')) \
+            .filter(billingDateTime__range=[startDate.isoformat(), endDate.isoformat()])
+
+        for q in qs:
+            data.append({
+                **q,
+                "sales": list(
+                    allSalesInRange.filter(billingMonth=q["billingMonth"], billingYear=q["billingYear"]).values())
+            })
+
+        return data
+
+    def byYears():
+        qs = Cart.objects.annotate(billingYear=Extract('billingDateTime', 'year')) \
+            .annotate(total=Sum('subTotal')) \
+            .filter(billingDateTime__range=[startDate.isoformat(), endDate.isoformat()]) \
+            .values('billingYear', "total") \
+            .annotate(noOfSalesForTheYear=Count('billingYear')) \
+            .order_by('billingYear')
+
+        data = []
+
+        allSalesInRange = Cart.objects.annotate(billingYear=Extract('billingDateTime', 'year')) \
+            .filter(billingDateTime__range=[startDate.isoformat(), endDate.isoformat()])
+
+        for q in qs:
+            data.append({
+                **q,
+                "sales": list(
+                    allSalesInRange.filter(billingYear=q["billingYear"]).values())
+            })
+
+        return data
+
+    if type is None:
+        if noOfMonths == 1 and noOfDays < 32:
+            salesByPeriodQS = byDays()
+        elif 0 < noOfMonths < 13:
+            salesByPeriodQS = byMonths()
+        elif noOfMonths > 12:
+            salesByPeriodQS = byYears()
+    elif type == "days":
+        salesByPeriodQS = byDays()
+    elif type == "months":
+        salesByPeriodQS = byMonths()
+    elif type == "years":
+        salesByPeriodQS = byYears()
+
+    data1 = {
+        "startDate": startDate,
+        "endDate": endDate,
+        "salesPeriodType": daterange_unit,
+        'salesByPeriod': salesByPeriodQS,
+        'salesByPeriodCount': salesForThePeriod.count(),
+        "total": salesForThePeriod.aggregate(Sum('subTotal'))['subTotal__sum']
+    }
+
+    # currentDate = timezone.now();
+    # chartStartDate = (currentDate - timezone.timedelta(days=365)).replace(day=1, hour=0, minute=0, second=0,
+    #                                                                       microsecond=0)
+    # chartEndDate = currentDate.replace(day=calendar.monthrange(chartStartDate.year, chartStartDate.month)[1], hour=23,
+    #                                    minute=59, second=59, microsecond=999999)
+
+    return Response(data1, status=status.HTTP_200_OK)

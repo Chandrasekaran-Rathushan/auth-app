@@ -1,3 +1,4 @@
+from datetime import datetime
 from time import sleep
 
 import requests
@@ -6,6 +7,7 @@ import simplejson
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
+from google.auth import jwt
 
 from rest_framework import viewsets, status, routers
 from rest_framework.authentication import SessionAuthentication
@@ -247,7 +249,16 @@ def sign_in(request):
 
             signed_in_success = serializer.data
 
-            return Response({**signed_in_success}, status=status.HTTP_200_OK)
+            decodedToken = jwt.decode(user['idToken'], verify=False)
+
+            return Response(
+                {
+                    **signed_in_success,
+                    "authTime": decodedToken["auth_time"],
+                    "iat": decodedToken["iat"],
+                    "exp": decodedToken["exp"],
+                    "isExpired": timezone.now().timestamp() > decodedToken["exp"],
+                }, status=status.HTTP_200_OK)
 
             # try:
             #     sleep(1)
@@ -326,17 +337,20 @@ def refresh_token(request):
         new_token = firebase_auth.refresh(request.GET.get('refresh_token', None))
         request.session['uid'] = new_token['idToken']
 
+        decodedToken = jwt.decode(new_token['idToken'], verify=False)
+
         serializer = UserTokenSerializer(expired_user_token, data={
             "user_token_id": vars(expired_user_token)['user_token_id'],
             "id": vars(system_user)['id'],
             "idToken": new_token['idToken'],
             "refreshToken": new_token['refreshToken'],
             "kind": vars(expired_user_token)['kind'],
-            "localId": vars(expired_user_token)['localId'],
+            "localId": new_token['userId'],
             "email": vars(expired_user_token)['email'],
             "displayName": vars(system_user)['first_name'] or vars(system_user)['email'],
             "registered": vars(expired_user_token)['registered'],
             "expiresIn": vars(expired_user_token)['expiresIn'],
+            "created_date": datetime.utcfromtimestamp(int(decodedToken["iat"])).strftime('%Y-%m-%dT%H:%M:%SZ')
         })
 
         if serializer.is_valid():
@@ -344,7 +358,16 @@ def refresh_token(request):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(new_token, status=status.HTTP_200_OK)
+        return Response(
+            {
+                **serializer.data,
+                "authTime": decodedToken["auth_time"],
+                "iat": decodedToken["iat"],
+                "exp": decodedToken["exp"],
+                "isExpired": timezone.now().timestamp() > decodedToken["exp"],
+                "email": decodedToken['email'],
+            },
+            status=status.HTTP_200_OK)
     except:
         return Response({"error": "something went wrong."})
 
@@ -442,15 +465,8 @@ def sign_out(request):
         return Response({"error": "User is not registered on the system. / you are not logged in."},
                         status=status.HTTP_400_BAD_REQUEST)
 
+    del request.session['uid']
     return Response({"message": "You have been logged out."}, status=status.HTTP_200_OK)
-
-
-class Test(APIView):
-    authentication_classes = [SessionAuthentication, FireBaseTokenAuthentication]
-    permission_classes = [IsAuthenticated, ]
-
-    def get(self, request):
-        return Response({"message": "success"}, status=status.HTTP_200_OK)
 
 
 @csrf_exempt

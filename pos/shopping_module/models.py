@@ -1,3 +1,5 @@
+import datetime
+
 from django.db import models
 from django.utils import timezone
 
@@ -19,7 +21,7 @@ class CustomIdNo(models.Model):
 
     @staticmethod
     def generateId(module, prefix, isYear, suffixNo):
-        year = {True: timezone.now().year, False: "", None: ""}[isYear]
+        year = {True: timezone.datetime.now().year, False: "", None: ""}[isYear]
 
         suffix = 0
 
@@ -45,7 +47,7 @@ class CustomIdNo(models.Model):
                 super().save(*args, **kwargs)
 
         else:
-            year = {True: timezone.now().year, False: ""}[self.isYear]
+            year = {True: timezone.datetime.now().year, False: ""}[self.isYear]
             suffix = 0
 
             try:
@@ -182,7 +184,10 @@ class CartItem(models.Model):
 
         cart.totalItems = cart.totalItems - 1
         cart.subTotal = cart.subTotal - self.price_ht
-        cart.billingDateTime = timezone.now()
+        if self.cart.billingDateTime is not None:
+            cart.billingDateTime = self.cart.billingDateTime
+        else:
+            cart.billingDateTime = timezone.now()
         cart.save(a=True)
 
     def save(self, *args, **kwargs):
@@ -223,5 +228,8 @@ class CartItem(models.Model):
             cart.totalItems = cart.totalItems + 1
 
         cart.subTotal = cart.subTotal + self.price_ht
-        cart.billingDateTime = timezone.now()
+        if self.cart.billingDateTime is not None:
+            cart.billingDateTime = self.cart.billingDateTime
+        else:
+            cart.billingDateTime = timezone.now()
         cart.save(a=True)

@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework import routers
 
 from .views import CustomerApiView, generateId, ProductApiView, cart_list_view, CartApiView, product_list_view, \
-    customer_list_view, CategoryApiView, category_list_view, cartItem_list_view, CartItemApiView
+    customer_list_view, CategoryApiView, category_list_view, cartItem_list_view, CartItemApiView, get_stats, \
+    get_sales_report
 
 router = routers.DefaultRouter()
 # router.register("customer", CustomerViewSet)
@@ -28,5 +29,7 @@ urlpatterns = [
     path('category/', category_list_view, name="Category"),
     path('category/<int:id>/', CategoryApiView.as_view()),
 
-    path('generateId/', generateId),
+    path('generateId/', generateId, name="generate_id"),
+    path('sales_stats/', get_stats, name="sales_stats"),
+    path('sales_report/', get_sales_report, name="sales_report"),
 ]

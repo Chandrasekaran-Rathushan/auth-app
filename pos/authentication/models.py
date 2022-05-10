@@ -1,3 +1,5 @@
+import datetime
+
 from cloudinary.models import CloudinaryField
 from django.db import models
 from django.contrib.auth.models import PermissionsMixin
@@ -46,7 +48,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
-    date_joined = models.DateTimeField(default=timezone.now)
+    date_joined = models.DateTimeField(default=timezone.now())
     dateOfBirth = models.DateTimeField(blank=True, null=True)
     address = models.CharField(max_length=30, blank=True, null=True)
     city = models.CharField(max_length=30, blank=True, null=True)
@@ -87,4 +89,4 @@ class UserToken(models.Model):
     registered = models.BooleanField()
     refreshToken = models.TextField()
     expiresIn = models.CharField(max_length=255)
-    created_date = models.DateTimeField(default=timezone.now)
+    created_date = models.DateTimeField(default=timezone.now())

@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework import routers
 
 from .views import UserViewSet, UserDetail, UserImageViewSet, UploadUserImage, index, sign_up, sign_in, refresh_token, \
-    reset_password, Test, sign_out, verify_password_reset, confirm_password_reset, authentication_urls, isAuthenticated
+    reset_password, sign_out, verify_password_reset, confirm_password_reset, authentication_urls, isAuthenticated
 
 router = routers.DefaultRouter()
 router.register("user", UserViewSet)
@@ -25,6 +25,4 @@ urlpatterns = [
     path('confirm_password_reset/', confirm_password_reset, name="confirm_password_reset"),
     path('sign_out/', sign_out, name="sign_out"),
     path('is_authenticated/', isAuthenticated, name="isAuthenticated"),
-
-    path('test/', Test.as_view(), name="test"),
 ]

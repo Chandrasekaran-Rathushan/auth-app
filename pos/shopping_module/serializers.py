@@ -1,3 +1,5 @@
+import datetime
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -83,7 +85,7 @@ class CartSerializer(serializers.ModelSerializer):
                                         initial=CustomIdNo.generateId(module="Order", prefix="ODR", isYear=True,
                                                                       suffixNo=None))
     createdTime = serializers.DateTimeField(read_only=True)
-    billingDateTime = serializers.DateTimeField(read_only=True)
+    billingDateTime = serializers.DateTimeField(default=timezone.now())
     customer = serializers.PrimaryKeyRelatedField(required=False, queryset=Customer.objects.all(), allow_null=True,
                                                   allow_empty=True)
     isCreditBill = serializers.BooleanField(default=False)

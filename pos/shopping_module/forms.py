@@ -1,3 +1,5 @@
+import datetime
+
 from django import forms
 from django.utils import timezone
 
@@ -67,7 +69,7 @@ class OrderForm(forms.ModelForm):
                                                                 suffixNo=None), required=True)
     customer = forms.ModelChoiceField(queryset=Customer.objects.all(), required=False)
     createdTime = forms.DateTimeField(disabled=True, initial=timezone.now(), required=False)
-    billingDateTime = forms.DateTimeField(disabled=True, initial=timezone.now(), required=False)
+    billingDateTime = forms.DateTimeField(initial=timezone.now(), required=False)
     isCreditBill = forms.BooleanField(initial=False, required=False)
     totalItems = forms.IntegerField(disabled=True, initial=0, required=False)
     subTotal = forms.FloatField(disabled=True, initial=0, required=False)
