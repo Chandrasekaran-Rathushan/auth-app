@@ -402,24 +402,44 @@ def get_stats(request):
     chartEndDate = currentDate.replace(day=calendar.monthrange(chartStartDate.year, chartStartDate.month)[1], hour=23,
                                        minute=59, second=59, microsecond=999999)
 
+    def convertToString(value):
+        try:
+            floatVal = float(value)
+            strVal = str(floatVal)
+            return strVal
+        except:
+            return "0.0"
+
+    sys_start_date = vars(Cart.objects.all().order_by("billingDateTime").first())['billingDateTime']
+    sys_end_date = currentDateEnd.isoformat().split("+")[0]
+
     try:
         completedOrders = {
             'key': 'completedOrders',
             'value': Cart.objects.filter(isOrdered=True).count(),
-            'label': "Completed Orders",
-            "type": "text"
+            'label': "Completed",
+            "type": "text",
+            'start': sys_start_date,
+            'end': sys_end_date,
+            "dateFormat": "DD MMM yyyy"
         }
         pendingOrders = {
             'key': 'pendingOrders',
             'value': Cart.objects.filter(isOrdered=False).count(),
-            'label': "Pending Orders",
-            "type": "text"
+            'label': "Pending",
+            "type": "text",
+            'start': sys_start_date,
+            'end': sys_end_date,
+            "dateFormat": "DD MMM yyyy"
         }
         creditOrders = {
             'key': 'creditOrders',
             'value': Cart.objects.filter(isCreditBill=True).count(),
-            'label': "Credit Orders",
-            "type": "text"
+            'label': "Credit",
+            "type": "text",
+            'start': sys_start_date,
+            'end': sys_end_date,
+            "dateFormat": "DD MMM yyyy"
         }
 
         salesForDayQS = Cart.objects.filter(
@@ -427,12 +447,13 @@ def get_stats(request):
 
         salesForTheDay = {
             'key': 'salesForTheDay',
-            'value': salesForDayQS.aggregate(Sum('subTotal'))['subTotal__sum'],
+            'value': convertToString(salesForDayQS.aggregate(Sum('subTotal'))['subTotal__sum']),
             'salesCount': salesForDayQS.count(),
-            'label': "Sales for the Day",
+            'label': "Today",
             'start': currentDateStart.isoformat().split("+")[0],
             'end': currentDateEnd.isoformat().split("+")[0],
-            "type": "date"
+            "type": "date",
+            "dateFormat": "hh:mm A"
         }
 
         salesForTheMonthQS = Cart.objects.filter(
@@ -440,12 +461,13 @@ def get_stats(request):
 
         salesForTheMonth = {
             'key': 'salesForTheMonth',
-            'value': salesForTheMonthQS.aggregate(Sum('subTotal'))['subTotal__sum'],
+            'value': str(salesForTheMonthQS.aggregate(Sum('subTotal'))['subTotal__sum']),
             'salesCount': salesForTheMonthQS.count(),
-            'label': "Sales for the Month",
+            'label': "Monthly Sales",
             'start': monthStartDate.isoformat().split("+")[0],
             'end': monthEndDate.isoformat().split("+")[0],
-            "type": "date"
+            "type": "date",
+            "dateFormat": "MMM"
         }
 
         salesForTheYearQS = Cart.objects.filter(
@@ -453,12 +475,13 @@ def get_stats(request):
 
         salesForTheYear = {
             'key': 'salesForTheYear',
-            'value': salesForTheYearQS.aggregate(Sum('subTotal'))['subTotal__sum'],
+            'value': str(salesForTheYearQS.aggregate(Sum('subTotal'))['subTotal__sum']),
             'salesCount': salesForTheYearQS.count(),
-            'label': "Sales for the Year",
+            'label': "Yearly Sales",
             'start': yearStartDate.isoformat().split("+")[0],
             'end': yearEndDate.isoformat().split("+")[0],
-            "type": "date"
+            "type": "date",
+            "dateFormat": "YYYY"
         }
 
         salesByMonthQS = Cart.objects.annotate(billingMonth=Extract('billingDateTime', 'month')) \
@@ -473,7 +496,7 @@ def get_stats(request):
             'key': 'salesByMonth',
             'value': list(salesByMonthQS),
             'monthCount': salesByMonthQS.count(),
-            'label': "Sales by Month",
+            'label': "Sales By Month",
             'start': chartStartDate.isoformat().split("+")[0],
             'end': chartEndDate.isoformat().split("+")[0],
             "type": "chart"
@@ -488,12 +511,12 @@ def get_stats(request):
         # print(a)
 
         data = [
-            completedOrders,
-            creditOrders,
-            pendingOrders,
             salesForTheDay,
             salesForTheMonth,
             salesForTheYear,
+            completedOrders,
+            creditOrders,
+            pendingOrders,
             salesByMonth
         ]
 
